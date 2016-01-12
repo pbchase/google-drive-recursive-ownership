@@ -51,30 +51,27 @@ def grant_ownership(service, drive_item, prefix, permission_id):
         elif owner['isAuthenticatedUser']:
             current_user_owns = True
 
-    print('Item {} needs ownership granted.'.format(full_path))
-
     if not current_user_owns:
-        print('    But, current user does not own the item.'.format(full_path))
         return
 
     try:
         permission = service.permissions().get(fileId=drive_item['id'], permissionId=permission_id).execute()
         permission['role'] = 'owner'
-        print('    Upgrading existing permissions to ownership.')
+        print('Item {} : Ownership changed'.format(full_path))
         return service.permissions().update(fileId=drive_item['id'], permissionId=permission_id, body=permission, transferOwnership=True).execute()
     except apiclient.errors.HttpError as e:
         if e.resp.status != 404:
-            print('An error occurred updating ownership permissions: {}'.format(e))
+            print('Item {}: could not change ownership '.format(full_path) + 'because {}'.format(e))
             return
 
-    print('    Creating new ownership permissions.')
     permission = {'role': 'owner',
                   'type': 'user',
                   'id': permission_id}
     try:
         service.permissions().insert(fileId=drive_item['id'], body=permission, emailMessage='Automated recursive transfer of ownership.').execute()
+        print('Item {}: Created new ownership permissions.'.format(full_path))
     except apiclient.errors.HttpError as e:
-        print('An error occurred inserting ownership permissions: {}'.format(e))
+        print('Item {}: could not insert ownership permissions '.format(full_path) + 'because {}'.format(e))
 
 def process_all_files(service, callback=None, callback_args=None, minimum_prefix=None, current_prefix=None, folder_id='root'):
     if minimum_prefix is None:
@@ -98,13 +95,13 @@ def process_all_files(service, callback=None, callback_args=None, minimum_prefix
                 #pprint.pprint(item)
                 if item['kind'] == 'drive#file':
                     if current_prefix[:len(minimum_prefix)] == minimum_prefix:
-                        print('File: {} ({}, {})'.format(item['title'].encode('utf-8', 'replace'), current_prefix, item['id']))
+                        # print('File: {} ({}, {})'.format(item['title'].encode('utf-8', 'replace'), current_prefix, item['id']))
                         callback(service, item, current_prefix, **callback_args)
                     if item['mimeType'] == 'application/vnd.google-apps.folder':
-                        print('Folder: {} ({}, {})'.format(item['title'], current_prefix, item['id']))
                         next_prefix = current_prefix + [item['title']]
                         comparison_length = min(len(next_prefix), len(minimum_prefix))
                         if minimum_prefix[:comparison_length] == next_prefix[:comparison_length]:
+                            print('Processing folder: {} ({}, {})'.format(item['title'], next_prefix, item['id']))
                             process_all_files(service, callback, callback_args, minimum_prefix, next_prefix, item['id'])
             page_token = children.get('nextPageToken')
             if not page_token:
